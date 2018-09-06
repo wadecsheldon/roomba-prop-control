@@ -38,6 +38,8 @@ VAR     ''System variable definitions
 
 VAR     ''Sensor variable definitions     
 
+  long ParseCycles
+
   long OdoBuffStart
   long OdoBuffEnd
   long IRBuffStart
@@ -61,7 +63,7 @@ VAR     ''Sensor variable definitions
   long Odometry[ODOMETRY_BUFFER_SIZE]
   byte IRData[IR_BUFFER_SIZE]  
   
-PUB Main | i
+PUB Main | n, avgCyc, lastCyc
 
   dira[LED]~~
   outa[LED]~~
@@ -87,12 +89,17 @@ PUB Main | i
   Debug.Str(string("Parsing sensor stream",CR,LF))
   cognew(StreamParser, @ParseStack) 
 
-  'Print battery values
-  Debug.Tx(CR)
-  Debug.Tx(LF)
+  'Print avg parsing time over 100 packets
   repeat
-    if IRBuffStart < IRBuffEnd
-      Debug.Tx(IRData[IRBuffStart++ // IR_BUFFER_SIZE])
+    if ParseCycles <> lastCyc and ParseCycles > 0
+      avgCyc += ParseCycles
+      lastCyc := ParseCycles
+      n++
+    if n == 100
+      Debug.Tx(CR)
+      Debug.Tx(LF)
+      Debug.Dec(avgCyc~ * 10 / clkfreq)
+      n~
        
 
 PUB SerForward
@@ -100,10 +107,11 @@ PUB SerForward
   repeat
     Create.Tx(Debug.Rx)
 
-PUB StreamParser | len, id, wallAcc, irByte, odoInc
+PUB StreamParser | len, id, wallAcc, irByte, odoInc, startCnt
 
   repeat
     repeat while Create.Rx <> 19
+    startCnt := cnt
     len := Create.Rx
     repeat while len > 0
       id := Create.Rx
@@ -254,7 +262,8 @@ PUB StreamParser | len, id, wallAcc, irByte, odoInc
 
       if lookdown(id: 6,5,42)
         LastDirect.word[1] := Create.Rx << 8 | Create.Rx
-        len -= 2  
+        len -= 2
+    ParseCycles := cnt - startCnt  
  
 PRI SendCmd(cmdPtr)
 
